@@ -97,7 +97,7 @@ client.on('interactionCreate', async interaction => {
       console.error('Error al obtener perfil:', error.message);
       return interaction.editReply('⚠️ Hubo un error al consultar el perfil.');
     }
-  }node
+  }
   
   if (interaction.commandName === 'assets') {
     const username = interaction.options.getString('usuario');
@@ -688,67 +688,79 @@ if (interaction.commandName === 'setcolor') {
   }
 }
 if (interaction.commandName === 'userinfo') {
-    const user = interaction.options.getUser('usuario') || interaction.user;
-    const member = interaction.guild.members.cache.get(user.id);
+  const user = interaction.options.getUser('usuario') || interaction.user;
+  const member = interaction.guild.members.cache.get(user.id) || await interaction.guild.members.fetch(user.id).catch(() => null);
+  const avatar = user.displayAvatarURL({ dynamic: true, size: 1024 });
+  const banner = user.bannerURL({ dynamic: true, size: 1024 });
 
-    const avatar = user.displayAvatarURL({ dynamic: true, size: 1024 });
-    const banner = user.bannerURL({ dynamic: true, size: 1024 });
+  const userFlags = user.flags?.toArray() || [];
+  const badgeEmojis = {
+    ActiveDeveloper: '💻',
+    BugHunterLevel1: '🐛',
+    BugHunterLevel2: '🐞',
+    CertifiedModerator: '🛡️',
+    HypeSquadOnlineHouse1: '🏠',
+    HypeSquadOnlineHouse2: '🏡',
+    HypeSquadOnlineHouse3: '🏘️',
+    HypeSquadEvents: '🎉',
+    Partner: '🤝',
+    PremiumEarlySupporter: '✨',
+    Staff: '👑',
+    VerifiedDeveloper: '🧪',
+    System: '⚙️'
+  };
 
-    const embed = {
-      color: 0x00bfff,
-      title: `Información de ${user.tag}`,
-      thumbnail: {
-        url: avatar,
+  const badges = userFlags.map(flag => badgeEmojis[flag] || flag).join(' ') || 'Ninguna';
+
+  const createdAt = `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`;
+  const joinedAt = member?.joinedAt ? `<t:${Math.floor(member.joinedAt / 1000)}:F>` : 'Desconocido';
+  const boostSince = member?.premiumSince ? `<t:${Math.floor(member.premiumSince / 1000)}:F>` : 'No está boosteando';
+
+  const embed = {
+    color: 0x00bfff,
+    title: `Información de ${user.tag}`,
+    thumbnail: { url: avatar },
+    fields: [
+      {
+        name: '🆔 ID',
+        value: `\`${user.id}\``,
+        inline: false
       },
-      fields: [
-        {
-          name: '👤 Nombre',
-          value: `${user.username}`,
-          inline: true
-        },
-        {
-          name: '🆔 ID',
-          value: `${user.id}`,
-          inline: true
-        },
-        {
-          name: '🤖 ¿Es bot?',
-          value: user.bot ? 'Sí' : 'No',
-          inline: true
-        },
-        {
-          name: '📅 Cuenta creada',
-          value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
-        },
-        {
-          name: '📆 Entró al servidor',
-          value: member?.joinedAt ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'Desconocido',
-        },
-        {
-          name: '🎖️ Booster del servidor',
-          value: member?.premiumSince ? `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:F>` : 'No',
-        },
-        {
-          name: '💎 ¿Tiene Nitro?',
-          value: user.avatar?.startsWith('a_') ? 'Probablemente sí (avatar animado)' : 'No detectado',
-        },
-        {
-          name: '📛 Roles',
-          value: member?.roles.cache
-            .filter(role => role.id !== interaction.guild.id)
-            .map(role => `<@&${role.id}>`)
-            .join(', ') || 'Ninguno',
-        }
-      ],
-      image: banner ? { url: banner } : undefined,
-      footer: {
-        text: `Solicitado por ${interaction.user.tag}`,
-        icon_url: interaction.user.displayAvatarURL({ dynamic: true })
-      }
-    };
+      {
+        name: '📅 Cuenta creada el',
+        value: createdAt,
+        inline: true
+      },
+      {
+        name: '🚪 Entró al servidor el',
+        value: joinedAt,
+        inline: true
+      },
+      {
+        name: '🚀 Boostea desde',
+        value: boostSince,
+        inline: true
+      },
+      {
+        name: '🎖️ Insignias',
+        value: badges,
+        inline: false
+      },
+      {
+        name: '🎨 Avatar',
+        value: `[Abrir avatar](${avatar})`,
+        inline: false
+      },
+    ],
+    footer: {
+      text: `Solicitado por ${interaction.user.tag}`,
+      icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+    },
+    timestamp: new Date()
+  };
 
-    await interaction.reply({ embeds: [embed] });
-  }
+  await interaction.reply({ embeds: [embed] });
+}
 
 });
 async function obtenerUserId(username) {
