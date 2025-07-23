@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const { MessageActionRow, MessageButton } = require('discord.js');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+
 
 app.get('/', (req, res) => {
   res.send('Bot está activo');
@@ -97,7 +97,7 @@ client.on('interactionCreate', async interaction => {
       console.error('Error al obtener perfil:', error.message);
       return interaction.editReply('⚠️ Hubo un error al consultar el perfil.');
     }
-  }
+  }node
   
   if (interaction.commandName === 'assets') {
     const username = interaction.options.getString('usuario');
@@ -687,7 +687,68 @@ if (interaction.commandName === 'setcolor') {
     });
   }
 }
+if (interaction.commandName === 'userinfo') {
+    const user = interaction.options.getUser('usuario') || interaction.user;
+    const member = interaction.guild.members.cache.get(user.id);
 
+    const avatar = user.displayAvatarURL({ dynamic: true, size: 1024 });
+    const banner = user.bannerURL({ dynamic: true, size: 1024 });
+
+    const embed = {
+      color: 0x00bfff,
+      title: `Información de ${user.tag}`,
+      thumbnail: {
+        url: avatar,
+      },
+      fields: [
+        {
+          name: '👤 Nombre',
+          value: `${user.username}`,
+          inline: true
+        },
+        {
+          name: '🆔 ID',
+          value: `${user.id}`,
+          inline: true
+        },
+        {
+          name: '🤖 ¿Es bot?',
+          value: user.bot ? 'Sí' : 'No',
+          inline: true
+        },
+        {
+          name: '📅 Cuenta creada',
+          value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
+        },
+        {
+          name: '📆 Entró al servidor',
+          value: member?.joinedAt ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'Desconocido',
+        },
+        {
+          name: '🎖️ Booster del servidor',
+          value: member?.premiumSince ? `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:F>` : 'No',
+        },
+        {
+          name: '💎 ¿Tiene Nitro?',
+          value: user.avatar?.startsWith('a_') ? 'Probablemente sí (avatar animado)' : 'No detectado',
+        },
+        {
+          name: '📛 Roles',
+          value: member?.roles.cache
+            .filter(role => role.id !== interaction.guild.id)
+            .map(role => `<@&${role.id}>`)
+            .join(', ') || 'Ninguno',
+        }
+      ],
+      image: banner ? { url: banner } : undefined,
+      footer: {
+        text: `Solicitado por ${interaction.user.tag}`,
+        icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+      }
+    };
+
+    await interaction.reply({ embeds: [embed] });
+  }
 
 });
 async function obtenerUserId(username) {

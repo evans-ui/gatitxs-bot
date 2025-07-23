@@ -127,7 +127,14 @@ option.setName('usuario')
       .setDescription('Color hexadecimal (por ejemplo, #ff0000)')
       .setRequired(true)
   ),
-  
+  new SlashCommandBuilder()
+    .setName('userinfo')
+    .setDescription('Muestra información de un usuario')
+    .addUserOption(option =>
+      option.setName('usuario')
+        .setDescription('Usuario del que quieres ver la info')
+        .setRequired(false)
+    ),
   
 
 ].map(command => command.toJSON());
