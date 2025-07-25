@@ -143,7 +143,21 @@ option.setName('usuario')
       .setDescription('Nombre de usuario de Roblox')
       .setRequired(true)
   ),
+  new SlashCommandBuilder()
+  .setName('primermensaje')
+  .setDescription('Muestra el primer mensaje enviado por un usuario en este servidor')
+  .addUserOption(option =>
+    option.setName('usuario')
+      .setDescription('Usuario del que quieres ver el primer mensaje')
+      .setRequired(false)
+  ),
 
+
+
+
+
+
+  
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

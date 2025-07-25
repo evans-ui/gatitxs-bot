@@ -816,7 +816,76 @@ if (interaction.commandName === 'nombresanteriores') {
     await interaction.editReply('⚠️ Hubo un error al obtener los nombres anteriores.');
   }
 }
+if (interaction.commandName === 'primermensaje') {
+  await interaction.deferReply({ ephemeral: false });
 
+  const targetUser = interaction.options.getUser('usuario') || interaction.user;
+  const guild = interaction.guild;
+
+  let firstMessage = null;
+  let firstChannel = null;
+
+  for (const [channelId, channel] of guild.channels.cache) {
+    if (!channel.isTextBased() || !channel.viewable || channel.type !== 0) continue;
+
+    let before;
+    let found = false;
+
+    try {
+      while (true) {
+        const options = { limit: 100 };
+        if (before) options.before = before;
+
+        const messages = await channel.messages.fetch(options);
+        if (messages.size === 0) break;
+
+        const userMessages = messages.filter(msg => msg.author.id === targetUser.id);
+        if (userMessages.size > 0) {
+          const oldest = userMessages.last();
+          if (!firstMessage || oldest.createdTimestamp < firstMessage.createdTimestamp) {
+            firstMessage = oldest;
+            firstChannel = channel;
+          }
+          found = true;
+        }
+
+        before = messages.last().id;
+        if (messages.size < 100) break;
+      }
+    } catch (err) {
+      continue; // ignorar canales sin permisos
+    }
+  }
+
+  if (firstMessage) {
+    const embed = {
+      color: 0x00bfff,
+      title: `📨 Primer mensaje de ${targetUser.tag}`,
+      description: `[Ver mensaje original](${firstMessage.url})`,
+      fields: [
+        {
+          name: '🕒 Fecha',
+          value: `<t:${Math.floor(firstMessage.createdTimestamp / 1000)}:F>`,
+        },
+        {
+          name: '📍 Canal',
+          value: `<#${firstChannel.id}>`,
+        },
+        {
+          name: '💬 Contenido',
+          value: firstMessage.content?.substring(0, 1024) || '*(Mensaje sin texto o embebido)*',
+        }
+      ],
+      footer: {
+        text: `ID del mensaje: ${firstMessage.id}`
+      }
+    };
+
+    await interaction.editReply({ embeds: [embed] });
+  } else {
+    await interaction.editReply(`No se encontró ningún mensaje de ${targetUser.tag} en este servidor.`);
+  }
+}
 
 
 
