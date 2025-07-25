@@ -761,6 +761,64 @@ if (interaction.commandName === 'userinfo') {
 
   await interaction.reply({ embeds: [embed] });
 }
+if (interaction.commandName === 'nombresanteriores') {
+  const username = interaction.options.getString('usuario');
+  await interaction.deferReply();
+
+  const puppeteer = require('puppeteer');
+
+  try {
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+
+    await page.goto(`https://www.roblox.com/users/profile?username=${encodeURIComponent(username)}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
+
+    const url = page.url();
+    if (url.includes('user.aspx')) {
+      await browser.close();
+      return await interaction.editReply(`❌ El usuario **${username}** no fue encontrado.`);
+    }
+
+    const previousNames = await page.evaluate(() => {
+      const el = document.querySelector('.previousNames');
+      if (!el) return null;
+
+      return el.innerText.replace('Previous usernames', '').trim().split(',').map(name => name.trim());
+    });
+
+    await browser.close();
+
+    if (!previousNames || previousNames.length === 0) {
+      await interaction.editReply(`🔍 El usuario **${username}** no tiene nombres anteriores visibles.`);
+    } else {
+      const embed = {
+        color: 0x00bfff,
+        title: `Nombres anteriores de ${username}`,
+        fields: previousNames.map((name, index) => ({
+          name: `#${index + 1}`,
+          value: name,
+          inline: true
+        })),
+        footer: {
+          text: `Solicitado por ${interaction.user.tag}`,
+          icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+        }
+      };
+
+      await interaction.editReply({ embeds: [embed] });
+    }
+
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply('⚠️ Hubo un error al obtener los nombres anteriores.');
+  }
+}
+
+
+
 
 });
 async function obtenerUserId(username) {

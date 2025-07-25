@@ -135,7 +135,14 @@ option.setName('usuario')
         .setDescription('Usuario del que quieres ver la info')
         .setRequired(false)
     ),
-  
+  new SlashCommandBuilder()
+  .setName('nombresanteriores')
+  .setDescription('Muestra los nombres anteriores de un usuario de Roblox')
+  .addStringOption(option =>
+    option.setName('usuario')
+      .setDescription('Nombre de usuario de Roblox')
+      .setRequired(true)
+  ),
 
 ].map(command => command.toJSON());
 
