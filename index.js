@@ -821,54 +821,62 @@ if (interaction.commandName === 'nombresanteriores') {
     await interaction.deferReply();
 
     try {
-      // 1. Buscar el userId usando Roblox API
-      const search = await axios.get(
-        `https://users.roblox.com/v1/users/search?keyword=${username}&limit=1`
+      // 1. Obtener userId REAL desde Roblox API
+      const userRes = await axios.post(
+        "https://users.roblox.com/v1/usernames/users",
+        { usernames: [username], excludeBannedUsers: false }
       );
 
-      if (!search.data.data.length) {
+      if (!userRes.data?.data?.length) {
         return interaction.editReply(`❌ No encontré al usuario **${username}**.`);
       }
 
-      const userId = search.data.data[0].id;
+      const userId = userRes.data.data[0].id;
 
-      // 2. Obtener actividad desde RoMonitor
-      const activityRes = await axios.get(
-        `https://api.romonitorstats.com/v1/users/${userId}/activity`
+      // 2. Obtener datos desde RoMonitor
+      const romonitor = await axios.get(
+        `https://api.romonitorstats.com/v1/users/${userId}`
       );
 
-      const activity = activityRes.data;
+      const data = romonitor.data;
 
-      // Si no está en un juego
-      if (!activity.lastLocation || !activity.lastLocation.placeId) {
-        return interaction.editReply(`⚠️ **${username}** no está en ningún juego ahora mismo.`);
+      if (!data.activity || !data.activity.lastLocation) {
+        return interaction.editReply(`⚠️ **${username}** no está jugando ahora mismo.`);
       }
 
-      // Sacar los datos
-      const placeId = activity.lastLocation.placeId;
-      const gameName = activity.lastLocation.gameName || "Desconocido";
-      const serverId = activity.server?.id || "No disponible";
-      const playerCount = activity.server?.playerCount || 0;
+      const loc = data.activity.lastLocation;
+
+      const placeId = loc.placeId || "Desconocido";
+      const gameName = loc.name || "Desconocido";
+      const universeId = loc.universeId || "Desconocido";
+      const joinScript = loc.joinScript || null;
 
       // Embed
       const embed = {
         title: `Tracking de ${username}`,
         color: 0x0099ff,
         fields: [
-          { name: "Juego", value: gameName },
-          { name: "Place ID", value: String(placeId) },
-          { name: "Server ID", value: serverId },
-          { name: "Jugadores en el servidor", value: String(playerCount) },
-          { name: "Link", value: `https://www.roblox.com/games/${placeId}` }
+          { name: "🎮 Juego", value: gameName.toString() },
+          { name: "📍 Place ID", value: placeId.toString() },
+          { name: "🌌 Universe ID", value: universeId.toString() },
+          { name: "🔗 Enlace", value: `https://www.roblox.com/games/${placeId}` }
         ],
         timestamp: new Date()
       };
 
+      // Si existe joinScript lo añadimos
+      if (joinScript) {
+        embed.fields.push({
+          name: "📝 Join Script",
+          value: `\`\`\`lua\n${joinScript}\n\`\`\``
+        });
+      }
+
       return interaction.editReply({ embeds: [embed] });
 
     } catch (error) {
-      console.error("Error en /track:", error.message);
-      return interaction.editReply("Hubo un error al consultar los datos de RoMonitor.");
+      console.error("Error en /track:", error.response?.data || error.message);
+      return interaction.editReply("⚠️ Hubo un error al consultar los datos de RoMonitor.");
     }
   }
 
