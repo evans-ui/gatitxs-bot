@@ -821,58 +821,54 @@ if (interaction.commandName === 'nombresanteriores') {
     await interaction.deferReply();
 
     try {
-      // 1. Obtener ID del usuario
-      const userLookup = await axios.post(
-        'https://users.roblox.com/v1/usernames/users',
-        {
-          usernames: [username],
-          excludeBannedUsers: false
-        }
+      // 1. Buscar el userId usando Roblox API
+      const search = await axios.get(
+        `https://users.roblox.com/v1/users/search?keyword=${username}&limit=1`
       );
 
-      if (!userLookup.data?.data?.length) {
-        return interaction.editReply("❌ Ese usuario no existe.");
+      if (!search.data.data.length) {
+        return interaction.editReply(`❌ No encontré al usuario **${username}**.`);
       }
 
-      const userId = userLookup.data.data[0].id;
+      const userId = search.data.data[0].id;
 
-      // 2. Obtener presencia
-      const presenceRes = await axios.post(
-        "https://presence.roblox.com/v1/presence/users",
-        {
-          userIds: [userId]
-        }
+      // 2. Obtener actividad desde RoMonitor
+      const activityRes = await axios.get(
+        `https://api.romonitorstats.com/v1/users/${userId}/activity`
       );
 
-      const data = presenceRes.data.userPresences[0];
+      const activity = activityRes.data;
 
-      // Si está offline
-      if (!data || data.userPresenceType === 0) {
-        return interaction.editReply(`🔴 **${username}** está **offline**.`);
+      // Si no está en un juego
+      if (!activity.lastLocation || !activity.lastLocation.placeId) {
+        return interaction.editReply(`⚠️ **${username}** no está en ningún juego ahora mismo.`);
       }
 
-      // Si está online pero NO en un juego
-      if (data.userPresenceType === 1) {
-        return interaction.editReply(`🟡 **${username}** está online, pero **no está en una experiencia**.`);
-      }
+      // Sacar los datos
+      const placeId = activity.lastLocation.placeId;
+      const gameName = activity.lastLocation.gameName || "Desconocido";
+      const serverId = activity.server?.id || "No disponible";
+      const playerCount = activity.server?.playerCount || 0;
 
-      // Si está jugando
+      // Embed
       const embed = {
         title: `Tracking de ${username}`,
-        color: 0x00ff99,
+        color: 0x0099ff,
         fields: [
-          { name: "Estado", value: "🟢 En una experiencia", inline: true },
-          { name: "Place ID", value: data.placeId?.toString() || "Desconocido", inline: true },
-          { name: "Server ID", value: `\`${data.gameId}\``, inline: false },
+          { name: "Juego", value: gameName },
+          { name: "Place ID", value: String(placeId) },
+          { name: "Server ID", value: serverId },
+          { name: "Jugadores en el servidor", value: String(playerCount) },
+          { name: "Link", value: `https://www.roblox.com/games/${placeId}` }
         ],
-        footer: { text: "Actualización en tiempo real" }
+        timestamp: new Date()
       };
 
       return interaction.editReply({ embeds: [embed] });
 
     } catch (error) {
-      console.log("TRACK ERROR:", error);
-      return interaction.editReply("⚠️ Error al consultar el estado del usuario.");
+      console.error("Error en /track:", error.message);
+      return interaction.editReply("Hubo un error al consultar los datos de RoMonitor.");
     }
   }
 
