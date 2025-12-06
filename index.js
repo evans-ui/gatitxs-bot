@@ -816,76 +816,65 @@ if (interaction.commandName === 'nombresanteriores') {
     await interaction.editReply('⚠️ Hubo un error al obtener los nombres anteriores.');
   }
 }
-if (interaction.commandName === 'primermensaje') {
-  await interaction.deferReply({ ephemeral: false });
-
-  const targetUser = interaction.options.getUser('usuario') || interaction.user;
-  const guild = interaction.guild;
-
-  let firstMessage = null;
-  let firstChannel = null;
-
-  for (const [channelId, channel] of guild.channels.cache) {
-    if (!channel.isTextBased() || !channel.viewable || channel.type !== 0) continue;
-
-    let before;
-    let found = false;
+ if (interaction.commandName === 'track') {
+    const username = interaction.options.getString('usuario');
+    await interaction.deferReply();
 
     try {
-      while (true) {
-        const options = { limit: 100 };
-        if (before) options.before = before;
-
-        const messages = await channel.messages.fetch(options);
-        if (messages.size === 0) break;
-
-        const userMessages = messages.filter(msg => msg.author.id === targetUser.id);
-        if (userMessages.size > 0) {
-          const oldest = userMessages.last();
-          if (!firstMessage || oldest.createdTimestamp < firstMessage.createdTimestamp) {
-            firstMessage = oldest;
-            firstChannel = channel;
-          }
-          found = true;
+      // 1. Obtener ID del usuario
+      const userLookup = await axios.post(
+        'https://users.roblox.com/v1/usernames/users',
+        {
+          usernames: [username],
+          excludeBannedUsers: false
         }
+      );
 
-        before = messages.last().id;
-        if (messages.size < 100) break;
+      if (!userLookup.data?.data?.length) {
+        return interaction.editReply("❌ Ese usuario no existe.");
       }
-    } catch (err) {
-      continue; // ignorar canales sin permisos
+
+      const userId = userLookup.data.data[0].id;
+
+      // 2. Obtener presencia
+      const presenceRes = await axios.post(
+        "https://presence.roblox.com/v1/presence/users",
+        {
+          userIds: [userId]
+        }
+      );
+
+      const data = presenceRes.data.userPresences[0];
+
+      // Si está offline
+      if (!data || data.userPresenceType === 0) {
+        return interaction.editReply(`🔴 **${username}** está **offline**.`);
+      }
+
+      // Si está online pero NO en un juego
+      if (data.userPresenceType === 1) {
+        return interaction.editReply(`🟡 **${username}** está online, pero **no está en una experiencia**.`);
+      }
+
+      // Si está jugando
+      const embed = {
+        title: `Tracking de ${username}`,
+        color: 0x00ff99,
+        fields: [
+          { name: "Estado", value: "🟢 En una experiencia", inline: true },
+          { name: "Place ID", value: data.placeId?.toString() || "Desconocido", inline: true },
+          { name: "Server ID", value: `\`${data.gameId}\``, inline: false },
+        ],
+        footer: { text: "Actualización en tiempo real" }
+      };
+
+      return interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+      console.log("TRACK ERROR:", error);
+      return interaction.editReply("⚠️ Error al consultar el estado del usuario.");
     }
   }
-
-  if (firstMessage) {
-    const embed = {
-      color: 0x00bfff,
-      title: `📨 Primer mensaje de ${targetUser.tag}`,
-      description: `[Ver mensaje original](${firstMessage.url})`,
-      fields: [
-        {
-          name: '🕒 Fecha',
-          value: `<t:${Math.floor(firstMessage.createdTimestamp / 1000)}:F>`,
-        },
-        {
-          name: '📍 Canal',
-          value: `<#${firstChannel.id}>`,
-        },
-        {
-          name: '💬 Contenido',
-          value: firstMessage.content?.substring(0, 1024) || '*(Mensaje sin texto o embebido)*',
-        }
-      ],
-      footer: {
-        text: `ID del mensaje: ${firstMessage.id}`
-      }
-    };
-
-    await interaction.editReply({ embeds: [embed] });
-  } else {
-    await interaction.editReply(`No se encontró ningún mensaje de ${targetUser.tag} en este servidor.`);
-  }
-}
 
 
 

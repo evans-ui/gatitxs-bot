@@ -144,12 +144,13 @@ option.setName('usuario')
       .setRequired(true)
   ),
   new SlashCommandBuilder()
-  .setName('primermensaje')
-  .setDescription('Muestra el primer mensaje enviado por un usuario en este servidor')
-  .addUserOption(option =>
-    option.setName('usuario')
-      .setDescription('Usuario del que quieres ver el primer mensaje')
-      .setRequired(false)
+        .setName('track')
+        .setDescription('Muestra si un jugador está online y en qué experiencia está jugando')
+        .addStringOption(option =>
+          option.setName('usuario')
+            .setDescription('Nombre de usuario de Roblox')
+            .setRequired(true)
+        
   ),
 
 
