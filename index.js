@@ -894,6 +894,87 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply("⚠️ Hubo un error al consultar los datos de RoMonitor.");
     }
   }
+  if (interaction.commandName === 'setgradient') {
+    try {
+      const rol = interaction.options.getRole('rol');
+      const color1 = interaction.options.getString('color1');
+      const color2 = interaction.options.getString('color2');
+
+      if (!interaction.guild.members.me.permissions.has('ManageRoles')) {
+        return await interaction.reply({
+          content: '❌ No tengo permisos para editar roles.',
+          ephemeral: true,
+        });
+      }
+
+      const botRole = interaction.guild.members.me.roles.highest;
+      if (botRole.position <= rol.position) {
+        return await interaction.reply({
+          content: '❌ No puedo modificar este rol porque está por encima de mi rol más alto.',
+          ephemeral: true,
+        });
+      }
+
+      // Validar colores hexadecimales
+      const hexRegex = /^#?([a-fA-F0-9]{6})$/;
+      const match1 = color1.match(hexRegex);
+      const match2 = color2.match(hexRegex);
+
+      if (!match1 || !match2) {
+        return await interaction.reply({
+          content: '❌ Ambos colores deben estar en formato hexadecimal. Ejemplo: `#ff0000` o `ff0000`.',
+          ephemeral: true,
+        });
+      }
+
+      // Convertir hex a número decimal para Discord
+      const colorInt1 = parseInt(match1[1], 16);
+      const colorInt2 = parseInt(match2[1], 16);
+
+      await interaction.deferReply();
+
+      // Editar el rol con los dos colores (gradiente nativo de Discord)
+      await rol.edit({
+        color: colorInt1, // Color principal
+        unicodeEmoji: null, // Remover emoji si tiene
+      });
+
+      // NOTA: Discord.js aún no tiene soporte completo para gradientes en la v14
+      // Necesitamos usar la API REST directamente
+      try {
+        await axios.patch(
+          `https://discord.com/api/v10/guilds/${interaction.guild.id}/roles/${rol.id}`,
+          {
+            color: colorInt1,
+            color_two: colorInt2, // Segundo color para el gradiente
+          },
+          {
+            headers: {
+              Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        await interaction.editReply(
+          `✅ Degradado aplicado al rol **${rol.name}**\n🎨 Colores: \`#${match1[1]}\` → \`#${match2[1]}\`\n\n⚠️ **Nota:** El servidor necesita **boost nivel 3** para ver el degradado.`
+        );
+      } catch (apiError) {
+        console.error('Error al aplicar gradiente con API:', apiError.response?.data || apiError.message);
+        
+        // Si falla, al menos aplicamos el primer color
+        await interaction.editReply(
+          `⚠️ No se pudo aplicar el degradado completo. Esto puede deberse a:\n• El servidor no tiene **boost nivel 3**\n• Discord aún no habilitó esta función para tu servidor\n\nSe aplicó el color \`#${match1[1]}\` al rol.`
+        );
+      }
+
+    } catch (error) {
+      console.error('Error en /setgradient:', error);
+      await interaction.editReply({
+        content: '❌ Ocurrió un error al aplicar el degradado.',
+      });
+    }
+  }
 
 });
 

@@ -152,6 +152,25 @@ option.setName('usuario')
             .setRequired(true)
         
   ),
+  new SlashCommandBuilder()
+    .setName('setgradient')
+    .setDescription('Aplica un degradado de dos colores al ícono de un rol')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
+    .addRoleOption(option =>
+      option.setName('rol')
+        .setDescription('El rol al que aplicarás el degradado')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('color1')
+        .setDescription('Primer color hexadecimal (ej: #ff0000)')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('color2')
+        .setDescription('Segundo color hexadecimal (ej: #0000ff)')
+        .setRequired(true)
+    ),
 
 
 
