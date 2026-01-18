@@ -179,6 +179,19 @@ option.setName('usuario')
         .setDescription('Nombre de usuario de Roblox')
         .setRequired(true)
     ),
+    new SlashCommandBuilder()
+    .setName('gameservers')
+    .setDescription('Muestra los servidores activos de un juego de Roblox')
+    .addStringOption(option =>
+      option.setName('game_id')
+        .setDescription('Place ID o Universe ID del juego')
+        .setRequired(true)
+    )
+    .addIntegerOption(option =>
+      option.setName('limite')
+        .setDescription('Cantidad de servidores a mostrar (1-50)')
+        .setRequired(false)
+    ),
 
 
 

@@ -1211,6 +1211,168 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply('⚠️ Hubo un error al verificar el estado de la cuenta.');
     }
   }
+  if (interaction.commandName === 'gameservers') {
+    const gameId = interaction.options.getString('game_id');
+    const limite = interaction.options.getInteger('limite') || 10;
+    await interaction.deferReply();
+    try {
+      const maxServers = Math.min(Math.max(limite, 1), 50);
+      // Paso 1: Obtener información del juego
+      let placeId = gameId;
+      let universeId = null;
+      let gameName = 'Desconocido';
+      // Intentar obtener info del juego (en caso de que sea un Universe ID)
+      try {
+        const universeRes = await axios.get(`https://games.roblox.com/v1/games?universeIds=${gameId}`);
+        if (universeRes.data.data.length > 0) {
+          placeId = universeRes.data.data[0].rootPlaceId;
+          gameName = universeRes.data.data[0].name;
+          universeId = gameId;
+        }
+      } catch (err) {
+        // Si falla, asumimos que es un Place ID
+      }
+
+      // Si no obtuvimos el nombre, intentar con Place ID
+      if (gameName === 'Desconocido') {
+        try {
+          const placeRes = await axios.get(`https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`);
+          if (placeRes.data.length > 0) {
+            gameName = placeRes.data[0].name;
+            universeId = placeRes.data[0].universeId;
+          }
+        } catch (err) {
+          return interaction.editReply('No se encontró el juego. Verifica que el ID sea correcto.');
+        }
+      }
+      // Paso 2: Obtener servidores activos
+      const serversRes = await axios.get(`https://games.roblox.com/v1/games/${placeId}/servers/Public`, {
+        params: {
+          sortOrder: 'Desc',
+          limit: maxServers
+        }
+      });
+      const servers = serversRes.data.data;
+
+      if (!servers || servers.length === 0) {
+        return interaction.editReply(`No hay servidores públicos activos en **${gameName}** en este momento.`);
+      }
+      // Paso 3: Crear páginas de servidores
+      let currentPage = 0;
+      const serversPerPage = 5;
+      const totalPages = Math.ceil(servers.length / serversPerPage);
+
+      const generateEmbed = (page) => {
+        const start = page * serversPerPage;
+        const end = start + serversPerPage;
+        const pageServers = servers.slice(start, end);
+
+        const fields = pageServers.map((server, index) => {
+          const playerRatio = `${server.playing}/${server.maxPlayers}`;
+          const serverNum = start + index + 1;
+          
+          return {
+            name: `🖥️ Servidor #${serverNum}`,
+            value: [
+              `Jugadores: **${playerRatio}**`,
+              `ID: \`${server.id}\``,
+              `FPS: ${server.fps || 'N/A'}`,
+              `Ping: ${server.ping || 'Desconocido'} ms`
+            ].join('\n'),
+            inline: true
+          };
+        });
+        return {
+          title: `Servidores de ${gameName}`,
+          description: `Mostrando **${servers.length}** servidores activos\n[Jugar ahora](https://www.roblox.com/games/${placeId})`,
+          color: 0x00b0f4,
+          fields: fields,
+          footer: {
+            text: `Página ${page + 1} de ${totalPages} • Place ID: ${placeId}`,
+            icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+          },
+          timestamp: new Date()
+        };
+      };
+      // Crear botones de navegación
+      const row = {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            label: 'Anterior',
+            style: 1,
+            custom_id: 'prev_server',
+            disabled: true
+          },
+          {
+            type: 2,
+            label: 'Siguiente',
+            style: 1,
+            custom_id: 'next_server',
+            disabled: servers.length <= serversPerPage
+          },
+          {
+            type: 2,
+            label: 'Actualizar',
+            style: 3,
+            custom_id: 'refresh_servers'
+          }
+        ]
+      };
+      const reply = await interaction.editReply({
+        embeds: [generateEmbed(currentPage)],
+        components: [row]
+      });
+
+      // Colector de botones
+      const collector = reply.createMessageComponentCollector({
+        time: 300000, // 5 minutos
+        filter: i => i.user.id === interaction.user.id
+      });
+
+      collector.on('collect', async i => {
+        if (i.customId === 'next_server') currentPage++;
+        else if (i.customId === 'prev_server') currentPage--;
+        else if (i.customId === 'refresh_servers') {
+          // Actualizar lista de servidores
+          try {
+            const refreshRes = await axios.get(`https://games.roblox.com/v1/games/${placeId}/servers/Public`, {
+              params: {
+                sortOrder: 'Desc',
+                limit: maxServers
+              }
+            });
+            servers.length = 0;
+            servers.push(...refreshRes.data.data);
+            currentPage = 0;
+          } catch (err) {
+            await i.reply({ content: '⚠️ Error al actualizar servidores.', ephemeral: true });
+            return;
+          }
+        }
+        // Actualizar botones
+        row.components[0].disabled = currentPage === 0;
+        row.components[1].disabled = currentPage >= totalPages - 1;
+        await i.update({
+          embeds: [generateEmbed(currentPage)],
+          components: [row]
+        });
+      });
+
+      collector.on('end', async () => {
+        row.components.forEach(btn => btn.disabled = true);
+        try {
+          await interaction.editReply({ components: [row] });
+        } catch (err) {
+          // Ignorar si el mensaje fue eliminado
+        }
+      });
+    } catch (error) {
+      console.error('Error en /gameservers:', error.message);
+      return interaction.editReply('Hubo un error al obtener los servidores del juego.');
+    }
+  }
 
 });
 
