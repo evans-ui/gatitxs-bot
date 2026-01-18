@@ -72,11 +72,11 @@ client.on('messageCreate', async message => {
       const color = args[1];
 
       if (!rol) {
-        return message.reply('❌ Uso: `!setcolor @rol #ff0000`');
+        return message.reply('❌ Uso: `g.setcolor @rol #ff0000`');
       }
 
       if (!color) {
-        return message.reply('❌ Debes especificar un color. Ejemplo: `!setcolor @rol #ff0000`');
+        return message.reply('❌ Debes especificar un color. Ejemplo: `g.setcolor @rol #ff0000`');
       }
 
       // Verificar permisos del bot
@@ -120,11 +120,11 @@ client.on('messageCreate', async message => {
       const emojiInput = args[1];
 
       if (!rol) {
-        return message.reply('❌ Uso: `!seticono @rol 🎉` o `!seticono @rol <:emoji:123456>`');
+        return message.reply('❌ Uso: `g.seticono @rol 🎉` o `g.seticono @rol <:emoji:123456>`');
       }
 
       if (!emojiInput) {
-        return message.reply('❌ Debes especificar un emoji. Ejemplo: `!seticono @rol 🎉`');
+        return message.reply('❌ Debes especificar un emoji. Ejemplo: `g.seticono @rol 🎉`');
       }
 
       // Verificar permisos del bot
@@ -1069,21 +1069,15 @@ client.on('interactionCreate', async interaction => {
           ephemeral: true,
         });
       }
-
       // Convertir hex a número decimal para Discord
       const colorInt1 = parseInt(match1[1], 16);
       const colorInt2 = parseInt(match2[1], 16);
 
       await interaction.deferReply();
-
-      // Editar el rol con los dos colores (gradiente nativo de Discord)
       await rol.edit({
         color: colorInt1, // Color principal
         unicodeEmoji: null, // Remover emoji si tiene
       });
-
-      // NOTA: Discord.js aún no tiene soporte completo para gradientes en la v14
-      // Necesitamos usar la API REST directamente
       try {
         await axios.patch(
           `https://discord.com/api/v10/guilds/${interaction.guild.id}/roles/${rol.id}`,
@@ -1116,6 +1110,105 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({
         content: '❌ Ocurrió un error al aplicar el degradado.',
       });
+    }
+  }
+  if (interaction.commandName === 'bansearch') {
+    const username = interaction.options.getString('usuario');
+    await interaction.deferReply();
+    try {
+      // Paso 1: Obtener el ID del usuario
+      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
+        usernames: [username],
+        excludeBannedUsers: false
+      });
+      if (!userRes.data?.data?.length) {
+        return interaction.editReply(`❌ No se encontró el usuario **${username}**.`);
+      }
+      const userId = userRes.data.data[0].id;
+      // Paso 2: Obtener información del usuario
+      const profileRes = await axios.get(`https://users.roblox.com/v1/users/${userId}`);
+      const profile = profileRes.data;
+      // Paso 3: Verificar si la cuenta está baneada
+      const isBanned = profile.isBanned || false;
+      // Paso 4: Obtener thumbnail (puede fallar si está baneado)
+      let avatarUrl = 'https://i.imgur.com/removed.png'; // Imagen por defecto
+      try {
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot`, {
+          params: {
+            userIds: userId,
+            size: '150x150',
+            format: 'Png',
+            isCircular: false
+          }
+        });
+        if (thumbRes.data.data[0]?.imageUrl) {
+          avatarUrl = thumbRes.data.data[0].imageUrl;
+        }
+      } catch (thumbError) {
+        console.log('No se pudo obtener thumbnail');
+      }
+      // Paso 5: Crear embed con resultado
+      const embed = {
+        title: `Estado de la cuenta: ${username}`,
+        thumbnail: {
+          url: avatarUrl
+        },
+        fields: [
+          {
+            name: 'Nombre de usuario',
+            value: profile.name,
+            inline: true
+          },
+          {
+            name: 'User ID',
+            value: userId.toString(),
+            inline: true
+          },
+          {
+            name: 'Cuenta creada',
+            value: new Date(profile.created).toLocaleDateString('es-ES'),
+            inline: true
+          },
+          {
+            name: 'Estado',
+            value: isBanned 
+              ? '❌ **CUENTA BANEADA**' 
+              : '✅ **Cuenta activa**',
+            inline: false
+          }
+        ],
+        color: isBanned ? 0xff0000 : 0x00ff00,
+        footer: {
+          text: isBanned 
+            ? 'Esta cuenta ha sido baneada de Roblox' 
+            : 'Esta cuenta está en buen estado',
+          icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+        },
+        timestamp: new Date()
+      };
+
+      // Si hay descripción, agregarla
+      if (profile.description && !isBanned) {
+        embed.fields.push({
+          name: '📝 Descripción',
+          value: profile.description.substring(0, 200) || 'Sin descripción',
+          inline: false
+        });
+      }
+
+      return interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+      console.error('Error en /bansearch:', error.message);
+      
+      // Si el error es 404, probablemente la cuenta fue eliminada/baneada
+      if (error.response?.status === 404) {
+        return interaction.editReply(
+          `❌ La cuenta **${username}** no existe o ha sido **eliminada/baneada** de Roblox.`
+        );
+      }
+      
+      return interaction.editReply('⚠️ Hubo un error al verificar el estado de la cuenta.');
     }
   }
 

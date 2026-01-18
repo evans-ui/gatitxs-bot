@@ -171,6 +171,14 @@ option.setName('usuario')
         .setDescription('Segundo color hexadecimal (ej: #0000ff)')
         .setRequired(true)
     ),
+    new SlashCommandBuilder()
+    .setName('bansearch')
+    .setDescription('Verifica si un usuario de Roblox ha sido baneado')
+    .addStringOption(option =>
+      option.setName('usuario')
+        .setDescription('Nombre de usuario de Roblox')
+        .setRequired(true)
+    ),
 
 
 
