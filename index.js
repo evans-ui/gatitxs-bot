@@ -17,13 +17,156 @@ const axios = require('axios');
 const puppeteer = require('puppeteer');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent 
+  ],
 });
 
 client.on('ready', () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
 });
 
+// ========== COMANDOS DE TEXTO ==========
+const PREFIX = 'g.';
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // ========== COMANDO DE TEXTO: !avatar ==========
+  if (command === 'avatar') {
+    try {
+      const usuario = message.mentions.users.first() || message.author;
+      const embed = {
+        title: `Avatar de ${usuario.username}`,
+        image: {
+          url: usuario.displayAvatarURL({ dynamic: true, size: 512 })
+        },
+        color: 0x00b0f4,
+        footer: {
+          text: `ID: ${usuario.id}`
+        }
+      };
+      
+      await message.reply({ embeds: [embed] });
+    } catch (error) {
+      console.error('Error al mostrar avatar:', error);
+      await message.reply('❌ Hubo un error al obtener el avatar.');
+    }
+  }
+
+  // ========== COMANDO DE TEXTO: !setcolor ==========
+  if (command === 'setcolor') {
+    try {
+      // Verificar permisos del usuario
+      if (!message.member.permissions.has('ManageRoles')) {
+        return message.reply('❌ No tienes permisos para gestionar roles.');
+      }
+
+      const rol = message.mentions.roles.first();
+      const color = args[1];
+
+      if (!rol) {
+        return message.reply('❌ Uso: `!setcolor @rol #ff0000`');
+      }
+
+      if (!color) {
+        return message.reply('❌ Debes especificar un color. Ejemplo: `!setcolor @rol #ff0000`');
+      }
+
+      // Verificar permisos del bot
+      if (!message.guild.members.me.permissions.has('ManageRoles')) {
+        return message.reply('❌ No tengo permisos para editar roles.');
+      }
+
+      // Verificar jerarquía de roles
+      const botRole = message.guild.members.me.roles.highest;
+      if (botRole.position <= rol.position) {
+        return message.reply('❌ No puedo modificar este rol porque está por encima de mi rol más alto.');
+      }
+
+      // Validar color hexadecimal
+      const hexRegex = /^#?([a-fA-F0-9]{6})$/;
+      const match = color.match(hexRegex);
+      if (!match) {
+        return message.reply('❌ El color debe estar en formato hexadecimal. Ejemplo: `#00ff00` o `00ff00`.');
+      }
+
+      const hexColor = `#${match[1]}`;
+
+      // Cambiar color
+      await rol.setColor(hexColor);
+      await message.reply(`✅ Color del rol **${rol.name}** cambiado a \`${hexColor}\`.`);
+    } catch (error) {
+      console.error('Error en !setcolor:', error);
+      await message.reply('❌ Ocurrió un error al cambiar el color del rol.');
+    }
+  }
+
+  // ========== COMANDO DE TEXTO: !seticono ==========
+  if (command === 'seticono') {
+    try {
+      // Verificar permisos del usuario
+      if (!message.member.permissions.has('ManageRoles')) {
+        return message.reply('❌ No tienes permisos para gestionar roles.');
+      }
+
+      const rol = message.mentions.roles.first();
+      const emojiInput = args[1];
+
+      if (!rol) {
+        return message.reply('❌ Uso: `!seticono @rol 🎉` o `!seticono @rol <:emoji:123456>`');
+      }
+
+      if (!emojiInput) {
+        return message.reply('❌ Debes especificar un emoji. Ejemplo: `!seticono @rol 🎉`');
+      }
+
+      // Verificar permisos del bot
+      if (!message.guild.members.me.permissions.has('ManageRoles')) {
+        return message.reply('❌ No tengo permisos para editar roles.');
+      }
+
+      // Verificar jerarquía de roles
+      const botRole = message.guild.members.me.roles.highest;
+      if (botRole.position <= rol.position) {
+        return message.reply('❌ No puedo modificar este rol porque está por encima de mi rol más alto.');
+      }
+
+      const customEmojiRegex = /^<a?:\w+:(\d+)>$/;
+      const match = emojiInput.match(customEmojiRegex);
+
+      if (match) {
+        // Emoji personalizado
+        const emojiId = match[1];
+        const isAnimated = emojiInput.startsWith('<a:');
+        const extension = isAnimated ? 'gif' : 'png';
+        const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
+
+        const res = await fetch(emojiUrl);
+        if (!res.ok) throw new Error('No se pudo descargar el emoji.');
+
+        const iconBuffer = await res.buffer();
+        await rol.setIcon(iconBuffer);
+        await message.reply(`✅ Ícono del rol **${rol.name}** actualizado con emoji personalizado.`);
+      } else {
+        // Emoji Unicode (normal)
+        await rol.setIcon(emojiInput);
+        await message.reply(`✅ Ícono del rol **${rol.name}** actualizado a ${emojiInput}`);
+      }
+
+    } catch (error) {
+      console.error('Error en !seticono:', error);
+      await message.reply('❌ No se pudo establecer el ícono. Asegúrate de que el emoji sea válido y el servidor tenga **boost nivel 2 o superior**.');
+    }
+  }
+});
+                          //comandos de slash//
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -946,7 +1089,7 @@ client.on('interactionCreate', async interaction => {
           `https://discord.com/api/v10/guilds/${interaction.guild.id}/roles/${rol.id}`,
           {
             color: colorInt1,
-            color_two: colorInt2, // Segundo color para el gradiente
+            color_two: colorInt2, 
           },
           {
             headers: {
@@ -957,14 +1100,14 @@ client.on('interactionCreate', async interaction => {
         );
 
         await interaction.editReply(
-          `✅ Degradado aplicado al rol **${rol.name}**\n🎨 Colores: \`#${match1[1]}\` → \`#${match2[1]}\`\n\n⚠️ **Nota:** El servidor necesita **boost nivel 3** para ver el degradado.`
+          `✅ Degradado aplicado al rol **${rol.name}**\n Colores: \`#${match1[1]}\` → \`#${match2[1]}\`\n\n **Nota:** El servidor necesita **boost nivel 3** para ver el degradado.`
         );
       } catch (apiError) {
         console.error('Error al aplicar gradiente con API:', apiError.response?.data || apiError.message);
         
         // Si falla, al menos aplicamos el primer color
         await interaction.editReply(
-          `⚠️ No se pudo aplicar el degradado completo. Esto puede deberse a:\n• El servidor no tiene **boost nivel 3**\n• Discord aún no habilitó esta función para tu servidor\n\nSe aplicó el color \`#${match1[1]}\` al rol.`
+          `No se pudo aplicar el degradado completo.`
         );
       }
 
