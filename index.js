@@ -922,58 +922,249 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ embeds: [embed] });
   }
 
-  // ========== COMANDO: /nombresanteriores ==========
-  if (interaction.commandName === 'nombresanteriores') {
+  if (interaction.commandName === 'namehistory') {
     const username = interaction.options.getString('usuario');
     await interaction.deferReply();
 
     try {
-      const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-      const page = await browser.newPage();
-
-      await page.goto(`https://www.roblox.com/users/profile?username=${encodeURIComponent(username)}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
+      // Paso 1: Obtener el ID del usuario
+      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
+        usernames: [username],
+        excludeBannedUsers: false
       });
 
-      const url = page.url();
-      if (url.includes('user.aspx')) {
-        await browser.close();
-        return await interaction.editReply(`❌ El usuario **${username}** no fue encontrado.`);
+      if (!userRes.data?.data?.length) {
+        return interaction.editReply(`❌ No se encontró el usuario **${username}**.`);
       }
 
-      const previousNames = await page.evaluate(() => {
-        const el = document.querySelector('.previousNames');
-        if (!el) return null;
+      const userId = userRes.data.data[0].id;
+      const currentName = userRes.data.data[0].name;
 
-        return el.innerText.replace('Previous usernames', '').trim().split(',').map(name => name.trim());
-      });
+      // Paso 2: Usar RoSearcher API (más confiable que scraping)
+      let previousNames = [];
+      
+      try {
+        // Intentar con la API de RoSearcher
+        const rosearcherRes = await axios.get(`https://users.roproxy.com/v1/users/${userId}/username-history`, {
+          params: {
+            limit: 100,
+            sortOrder: 'Desc'
+          }
+        });
+        
+        if (rosearcherRes.data?.data) {
+          previousNames = rosearcherRes.data.data.map(entry => entry.name);
+        }
+      } catch (apiError) {
+        console.log('API de username-history no disponible, intentando con scraping...');
+        
+        // Fallback: usar Puppeteer como antes
+        try {
+          const browser = await puppeteer.launch({ 
+            headless: true, 
+            args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+          });
+          const page = await browser.newPage();
 
-      await browser.close();
+          await page.goto(`https://www.roblox.com/users/${userId}/profile`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+          });
 
+          previousNames = await page.evaluate(() => {
+            const el = document.querySelector('.previousNames');
+            if (!el) return [];
+            
+            const text = el.innerText.replace('Previous usernames:', '').trim();
+            if (!text) return [];
+            
+            return text.split(',').map(name => name.trim());
+          });
+
+          await browser.close();
+        } catch (puppeteerError) {
+          console.error('Error con Puppeteer:', puppeteerError.message);
+        }
+      }
+
+      // Paso 3: Obtener información adicional del usuario
+      const profileRes = await axios.get(`https://users.roblox.com/v1/users/${userId}`);
+      const profile = profileRes.data;
+      
+      // Obtener thumbnail
+      let avatarUrl = '';
+      try {
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot`, {
+          params: {
+            userIds: userId,
+            size: '150x150',
+            format: 'Png',
+            isCircular: false
+          }
+        });
+        avatarUrl = thumbRes.data.data[0]?.imageUrl || '';
+      } catch (err) {
+        console.log('No se pudo obtener avatar');
+      }
+
+      // Paso 4: Crear embed con el historial
       if (!previousNames || previousNames.length === 0) {
-        await interaction.editReply(`🔍 El usuario **${username}** no tiene nombres anteriores visibles.`);
-      } else {
         const embed = {
-          color: 0x00bfff,
-          title: `Nombres anteriores de ${username}`,
-          fields: previousNames.map((name, index) => ({
-            name: `#${index + 1}`,
-            value: name,
-            inline: true
-          })),
+          title: `Historial de nombres`,
+          description: `El usuario **${currentName}** no tiene nombres anteriores registrados.`,
+          color: 0x00b0f4,
+          thumbnail: {
+            url: avatarUrl
+          },
+          fields: [
+            {
+              name: 'Nombre actual',
+              value: currentName,
+              inline: true
+            },
+            {
+              name: 'User ID',
+              value: userId.toString(),
+              inline: true
+            },
+            {
+              name: 'Cuenta creada',
+              value: new Date(profile.created).toLocaleDateString('es-ES', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }),
+              inline: false
+            }
+          ],
           footer: {
             text: `Solicitado por ${interaction.user.tag}`,
             icon_url: interaction.user.displayAvatarURL({ dynamic: true })
           }
         };
+        
+        return interaction.editReply({ embeds: [embed] });
+      }
 
-        await interaction.editReply({ embeds: [embed] });
+      // Paso 5: Paginación de nombres
+      let currentPage = 0;
+      const namesPerPage = 10;
+      const totalPages = Math.ceil(previousNames.length / namesPerPage);
+
+      const generateEmbed = (page) => {
+        const start = page * namesPerPage;
+        const end = start + namesPerPage;
+        const pageNames = previousNames.slice(start, end);
+
+        // Calcular edad de la cuenta
+        const accountAge = Math.floor((Date.now() - new Date(profile.created)) / (1000 * 60 * 60 * 24));
+        const years = Math.floor(accountAge / 365);
+        const months = Math.floor((accountAge % 365) / 30);
+
+        return {
+          title: `Historial de nombres de ${currentName}`,
+          description: `**Nombre actual:** ${currentName}\n**Total de nombres anteriores:** ${previousNames.length}`,
+          color: 0x00b0f4,
+          thumbnail: {
+            url: avatarUrl
+          },
+          fields: [
+            {
+              name: 'User ID',
+              value: userId.toString(),
+              inline: true
+            },
+            {
+              name: 'Edad de cuenta',
+              value: years > 0 
+                ? `${years} año${years > 1 ? 's' : ''} y ${months} mes${months !== 1 ? 'es' : ''}`
+                : `${months} mes${months !== 1 ? 'es' : ''}`,
+              inline: true
+            },
+            {
+              name: 'Creada el',
+              value: new Date(profile.created).toLocaleDateString('es-ES'),
+              inline: true
+            },
+            {
+              name: `Nombres anteriores (${start + 1}-${Math.min(end, previousNames.length)} de ${previousNames.length})`,
+              value: pageNames.map((name, index) => 
+                `**${start + index + 1}.** ${name}`
+              ).join('\n') || 'Sin nombres',
+              inline: false
+            }
+          ],
+          footer: {
+            text: `Página ${page + 1} de ${totalPages} • Solicitado por ${interaction.user.tag}`,
+            icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+          },
+          timestamp: new Date()
+        };
+      };
+
+      // Crear botones solo si hay múltiples páginas
+      const components = [];
+      if (totalPages > 1) {
+        components.push({
+          type: 1,
+          components: [
+            {
+              type: 2,
+              label: 'Anterior',
+              style: 1,
+              custom_id: 'prev_name',
+              disabled: true
+            },
+            {
+              type: 2,
+              label: 'Siguiente',
+              style: 1,
+              custom_id: 'next_name',
+              disabled: previousNames.length <= namesPerPage
+            }
+          ]
+        });
+      }
+
+      const reply = await interaction.editReply({
+        embeds: [generateEmbed(currentPage)],
+        components: components
+      });
+
+      // Si hay botones, crear colector
+      if (totalPages > 1) {
+        const collector = reply.createMessageComponentCollector({
+          time: 180000, // 3 minutos
+          filter: i => i.user.id === interaction.user.id
+        });
+
+        collector.on('collect', async i => {
+          if (i.customId === 'next_name') currentPage++;
+          else if (i.customId === 'prev_name') currentPage--;
+
+          // Actualizar botones
+          components[0].components[0].disabled = currentPage === 0;
+          components[0].components[1].disabled = currentPage >= totalPages - 1;
+
+          await i.update({
+            embeds: [generateEmbed(currentPage)],
+            components: components
+          });
+        });
+
+        collector.on('end', async () => {
+          components[0].components.forEach(btn => btn.disabled = true);
+          try {
+            await interaction.editReply({ components: components });
+          } catch (err) {
+            // Ignorar si el mensaje fue eliminado
+          }
+        });
       }
 
     } catch (error) {
-      console.error(error);
-      await interaction.editReply('⚠️ Hubo un error al obtener los nombres anteriores.');
+      console.error('Error en /namehistory:', error.message);
+      return interaction.editReply('⚠️ Hubo un error al obtener el historial de nombres.');
     }
   }
 

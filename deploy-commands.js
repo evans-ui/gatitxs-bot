@@ -136,14 +136,6 @@ option.setName('usuario')
         .setRequired(false)
     ),
   new SlashCommandBuilder()
-  .setName('nombresanteriores')
-  .setDescription('Muestra los nombres anteriores de un usuario de Roblox')
-  .addStringOption(option =>
-    option.setName('usuario')
-      .setDescription('Nombre de usuario de Roblox')
-      .setRequired(true)
-  ),
-  new SlashCommandBuilder()
         .setName('track')
         .setDescription('Muestra si un jugador está online y en qué experiencia está jugando')
         .addStringOption(option =>
@@ -191,6 +183,14 @@ option.setName('usuario')
       option.setName('limite')
         .setDescription('Cantidad de servidores a mostrar (1-50)')
         .setRequired(false)
+    ),
+    new SlashCommandBuilder()
+    .setName('namehistory')
+    .setDescription('Muestra el historial completo de nombres de un usuario de Roblox')
+    .addStringOption(option =>
+      option.setName('usuario')
+        .setDescription('Nombre de usuario de Roblox')
+        .setRequired(true)
     ),
 
 
