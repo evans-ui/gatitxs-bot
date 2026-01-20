@@ -1564,6 +1564,263 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply('Hubo un error al obtener los servidores del juego.');
     }
   }
+  // ========== COMANDO: /friendactivity ==========
+if (interaction.commandName === 'friendactivity') {
+  const username = interaction.options.getString('usuario');
+  await interaction.deferReply();
+
+  try {
+    // Paso 1: Obtener el ID del usuario
+    const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
+      usernames: [username],
+      excludeBannedUsers: false
+    });
+
+    if (!userRes.data?.data?.length) {
+      return interaction.editReply(`❌ No se encontró el usuario **${username}**.`);
+    }
+
+    const userId = userRes.data.data[0].id;
+
+    // Paso 2: Obtener lista de amigos
+    const friendsRes = await axios.get(`https://friends.roblox.com/v1/users/${userId}/friends`);
+    const friends = friendsRes.data.data;
+
+    if (!friends.length) {
+      return interaction.editReply(`El usuario **${username}** no tiene amigos públicos o su lista de amigos es privada.`);
+    }
+
+    // Paso 3: Obtener presencia de los amigos (en lotes de 50)
+    const friendIds = friends.map(f => f.id);
+    const presencePromises = [];
+    
+    // Dividir en lotes de 50 (límite de la API)
+    for (let i = 0; i < friendIds.length; i += 50) {
+      const batch = friendIds.slice(i, i + 50);
+      presencePromises.push(
+        axios.post('https://presence.roblox.com/v1/presence/users', {
+          userIds: batch
+        })
+      );
+    }
+
+    const presenceResults = await Promise.all(presencePromises);
+    const allPresences = presenceResults.flatMap(res => res.data.userPresences);
+
+    // Paso 4: Filtrar solo amigos que están jugando
+    const playingFriends = [];
+
+    for (const presence of allPresences) {
+      if (presence.userPresenceType === 2 && presence.placeId && presence.universeId) {
+        const friend = friends.find(f => f.id === presence.userId);
+        if (friend) {
+          playingFriends.push({
+            name: friend.displayName || friend.name,
+            id: friend.id,
+            placeId: presence.placeId,
+            universeId: presence.universeId,
+            lastLocation: presence.lastLocation
+          });
+        }
+      }
+    }
+
+    if (!playingFriends.length) {
+      return interaction.editReply(`Ninguno de los amigos de **${username}** está jugando en este momento.\n\nTotal de amigos: ${friends.length}`);
+    }
+
+    // Paso 5: Obtener información de los juegos
+    const universeIds = [...new Set(playingFriends.map(f => f.universeId))];
+    const gamesRes = await axios.get(`https://games.roblox.com/v1/games?universeIds=${universeIds.join(',')}`);
+    const games = gamesRes.data.data;
+
+    // Mapear juegos por universeId
+    const gameMap = {};
+    games.forEach(game => {
+      gameMap[game.id] = game.name;
+    });
+
+    // Paso 6: Crear embed con paginación
+    let currentPage = 0;
+    const friendsPerPage = 10;
+    const totalPages = Math.ceil(playingFriends.length / friendsPerPage);
+
+    const generateEmbed = (page) => {
+      const start = page * friendsPerPage;
+      const end = start + friendsPerPage;
+      const pageFriends = playingFriends.slice(start, end);
+
+      const fields = pageFriends.map(friend => {
+        const gameName = gameMap[friend.universeId] || 'Juego desconocido';
+        return {
+          name: `🎮 ${friend.name}`,
+          value: [
+            `**Jugando:** [${gameName}](https://www.roblox.com/games/${friend.placeId})`,
+            `**Perfil:** [Ver](https://www.roblox.com/users/${friend.id}/profile)`
+          ].join('\n'),
+          inline: false
+        };
+      });
+
+      return {
+        title: `Actividad de amigos de ${username}`,
+        description: `${playingFriends.length} de ${friends.length} amigos están jugando ahora`,
+        color: 0x00ff00,
+        fields: fields,
+        footer: {
+          text: `Página ${page + 1} de ${totalPages} • ${playingFriends.length} jugando`,
+          icon_url: interaction.user.displayAvatarURL({ dynamic: true })
+        },
+        timestamp: new Date()
+      };
+    };
+
+    // Crear botones si hay múltiples páginas
+    const components = [];
+    if (totalPages > 1) {
+      components.push({
+        type: 1,
+        components: [
+          {
+            type: 2,
+            label: '⬅️ Anterior',
+            style: 1,
+            custom_id: 'prev_activity',
+            disabled: true
+          },
+          {
+            type: 2,
+            label: '➡️ Siguiente',
+            style: 1,
+            custom_id: 'next_activity',
+            disabled: playingFriends.length <= friendsPerPage
+          },
+          {
+            type: 2,
+            label: '🔄 Actualizar',
+            style: 3,
+            custom_id: 'refresh_activity'
+          }
+        ]
+      });
+    } else {
+      // Si solo hay una página, al menos poner botón de actualizar
+      components.push({
+        type: 1,
+        components: [
+          {
+            type: 2,
+            label: '🔄 Actualizar',
+            style: 3,
+            custom_id: 'refresh_activity'
+          }
+        ]
+      });
+    }
+
+    const reply = await interaction.editReply({
+      embeds: [generateEmbed(currentPage)],
+      components: components
+    });
+
+    // Colector de botones
+    const collector = reply.createMessageComponentCollector({
+      time: 300000, // 5 minutos
+      filter: i => i.user.id === interaction.user.id
+    });
+
+    collector.on('collect', async i => {
+      if (i.customId === 'next_activity') {
+        currentPage++;
+      } else if (i.customId === 'prev_activity') {
+        currentPage--;
+      } else if (i.customId === 'refresh_activity') {
+        // Actualizar datos
+        await i.deferUpdate();
+        
+        try {
+          // Volver a obtener presencias
+          const newPresencePromises = [];
+          for (let j = 0; j < friendIds.length; j += 50) {
+            const batch = friendIds.slice(j, j + 50);
+            newPresencePromises.push(
+              axios.post('https://presence.roblox.com/v1/presence/users', {
+                userIds: batch
+              })
+            );
+          }
+
+          const newPresenceResults = await Promise.all(newPresencePromises);
+          const newAllPresences = newPresenceResults.flatMap(res => res.data.userPresences);
+
+          // Actualizar lista de amigos jugando
+          playingFriends.length = 0;
+          for (const presence of newAllPresences) {
+            if (presence.userPresenceType === 2 && presence.placeId && presence.universeId) {
+              const friend = friends.find(f => f.id === presence.userId);
+              if (friend) {
+                playingFriends.push({
+                  name: friend.displayName || friend.name,
+                  id: friend.id,
+                  placeId: presence.placeId,
+                  universeId: presence.universeId,
+                  lastLocation: presence.lastLocation
+                });
+              }
+            }
+          }
+
+          if (!playingFriends.length) {
+            return i.editReply({
+              content: `Ninguno de los amigos de **${username}** está jugando en este momento.\n\n Total de amigos: ${friends.length}`,
+              embeds: [],
+              components: []
+            });
+          }
+
+          // Actualizar información de juegos
+          const newUniverseIds = [...new Set(playingFriends.map(f => f.universeId))];
+          const newGamesRes = await axios.get(`https://games.roblox.com/v1/games?universeIds=${newUniverseIds.join(',')}`);
+          const newGames = newGamesRes.data.data;
+
+          Object.keys(gameMap).forEach(key => delete gameMap[key]);
+          newGames.forEach(game => {
+            gameMap[game.id] = game.name;
+          });
+
+          currentPage = 0;
+        } catch (err) {
+          await i.followUp({ content: 'Error al actualizar la actividad.', ephemeral: true });
+          return;
+        }
+      }
+
+      // Actualizar botones
+      if (totalPages > 1) {
+        components[0].components[0].disabled = currentPage === 0;
+        components[0].components[1].disabled = currentPage >= totalPages - 1;
+      }
+
+      await i.update({
+        embeds: [generateEmbed(currentPage)],
+        components: components
+      });
+    });
+
+    collector.on('end', async () => {
+      components.forEach(row => row.components.forEach(btn => btn.disabled = true));
+      try {
+        await interaction.editReply({ components: components });
+      } catch (err) {
+        // Ignorar si el mensaje fue eliminado
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en /friendactivity:', error.message);
+    return interaction.editReply('Hubo un error al obtener la actividad de los amigos.');
+  }
+}
 
 });
 

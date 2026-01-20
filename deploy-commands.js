@@ -192,6 +192,14 @@ option.setName('usuario')
         .setDescription('Nombre de usuario de Roblox')
         .setRequired(true)
     ),
+    new SlashCommandBuilder()
+    .setName('friendactivity')
+    .setDescription('Muestra qué están jugando los amigos de un usuario de Roblox')
+    .addStringOption(option =>
+      option.setName('usuario')
+        .setDescription('Nombre de usuario de Roblox')
+        .setRequired(true)
+    ),
 
 
 
