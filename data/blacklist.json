@@ -1,0 +1,26 @@
+{
+  "guilds": {
+    "1195188482025467975": {
+      "messageId": "1538969024896049253",
+      "channelId": "1195188482025467977",
+      "users": [
+        {
+          "userId": "1641424100",
+          "username": "evnsqa",
+          "game": "heroes"
+        }
+      ]
+    },
+    "1528595640785834024": {
+      "messageId": "1538981405965688967",
+      "channelId": "1536146203429834862",
+      "users": [
+        {
+          "userId": "2633728483",
+          "username": "xobeIize",
+          "game": "heroes"
+        }
+      ]
+    }
+  }
+}
