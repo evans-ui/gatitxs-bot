@@ -9,7 +9,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -23,6 +24,7 @@ loadCommands(client);
 require('./events/ready')(client);
 require('./events/interactionCreate')(client);
 require('./events/messageCreate')(client);
+require('./events/guildMemberUpdate')(client);
 
 // Iniciar servidor Express
 expressServer();
