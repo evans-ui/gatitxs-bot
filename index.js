@@ -1,33 +1,94 @@
 require('dotenv').config();
 
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  Collection
+} = require('discord.js');
 
-const expressServer = require('./server/express');
-const loadCommands = require('./utils/loadCommands');
+const expressServer =
+  require('./server/express');
+
+const loadCommands =
+  require('./utils/loadCommands');
+
 
 const client = new Client({
+
   intents: [
+
     GatewayIntentBits.Guilds,
+
     GatewayIntentBits.GuildMessages,
+
     GatewayIntentBits.MessageContent,
+
     GatewayIntentBits.GuildMembers
+
   ]
+
 });
 
-// Colección de slash commands
-client.commands = new Collection();
 
-// Cargar comandos automáticamente
-loadCommands(client);
+/*
+ * ============================================================
+ * COLECCIÓN DE SLASH COMMANDS
+ * ============================================================
+ */
 
-// Eventos
-require('./events/ready')(client);
-require('./events/interactionCreate')(client);
-require('./events/messageCreate')(client);
-require('./events/guildMemberUpdate')(client);
+client.commands =
+  new Collection();
 
-// Iniciar servidor Express
+
+/*
+ * ============================================================
+ * CARGAR COMANDOS
+ * ============================================================
+ */
+
+loadCommands(
+  client
+);
+
+
+/*
+ * ============================================================
+ * EVENTOS
+ * ============================================================
+ */
+
+require('./events/ready')(
+  client
+);
+
+require('./events/interactionCreate')(
+  client
+);
+
+require('./events/messageCreate')(
+  client
+);
+
+require('./events/guildMemberUpdate')(
+  client
+);
+
+
+/*
+ * ============================================================
+ * EXPRESS
+ * ============================================================
+ */
+
 expressServer();
 
-// Iniciar bot
-client.login(process.env.DISCORD_TOKEN);
+
+/*
+ * ============================================================
+ * LOGIN
+ * ============================================================
+ */
+
+client.login(
+  process.env.DISCORD_TOKEN
+);

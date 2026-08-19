@@ -27,7 +27,7 @@ const DATA_FILE =
 
 /*
  * ============================================================
- * ASEGURAR ARCHIVO DE DATOS
+ * ARCHIVO DE DATOS
  * ============================================================
  */
 
@@ -44,7 +44,6 @@ function ensureDataFile() {
 
   }
 
-
   if (!fs.existsSync(DATA_FILE)) {
 
     fs.writeFileSync(
@@ -58,25 +57,18 @@ function ensureDataFile() {
 }
 
 
-/*
- * ============================================================
- * LEER DATOS
- * ============================================================
- */
-
 function loadBoosterRoles() {
 
   ensureDataFile();
 
   try {
 
-    const data =
+    return JSON.parse(
       fs.readFileSync(
         DATA_FILE,
         'utf8'
-      );
-
-    return JSON.parse(data);
+      )
+    );
 
   } catch (error) {
 
@@ -91,12 +83,6 @@ function loadBoosterRoles() {
 
 }
 
-
-/*
- * ============================================================
- * GUARDAR DATOS
- * ============================================================
- */
 
 function saveBoosterRoles(data) {
 
@@ -130,12 +116,6 @@ module.exports =
 
         try {
 
-          /*
-           * --------------------------------------------------
-           * CONFIGURACIÓN
-           * --------------------------------------------------
-           */
-
           if (!BOOSTER_ROLE_ID) {
 
             console.error(
@@ -146,12 +126,6 @@ module.exports =
 
           }
 
-
-          /*
-           * --------------------------------------------------
-           * COMPROBAR CAMBIO DE BOOST
-           * --------------------------------------------------
-           */
 
           const wasBoosting =
             Boolean(
@@ -165,9 +139,9 @@ module.exports =
 
 
           /*
-           * --------------------------------------------------
-           * EMPEZÓ A BOOSTEAR
-           * --------------------------------------------------
+           * ==================================================
+           * NUEVO BOOST
+           * ==================================================
            */
 
           if (
@@ -185,9 +159,9 @@ module.exports =
 
 
           /*
-           * --------------------------------------------------
+           * ==================================================
            * DEJÓ DE BOOSTEAR
-           * --------------------------------------------------
+           * ==================================================
            */
 
           if (
@@ -220,7 +194,67 @@ module.exports =
 
 /*
  * ============================================================
- * CREAR ROL DE BOOSTER
+ * COMPROBAR CONFIGURACIÓN DEL BOT
+ * ============================================================
+ */
+
+function canManageBoosterRole(
+  guild,
+  boosterRole
+) {
+
+  const botMember =
+    guild.members.me;
+
+
+  if (!botMember) {
+
+    console.error(
+      '❌ No pude encontrar al bot en el servidor.'
+    );
+
+    return false;
+
+  }
+
+
+  if (
+    !botMember.permissions.has(
+      PermissionsBitField.Flags.ManageRoles
+    )
+  ) {
+
+    console.error(
+      `❌ El bot no tiene Manage Roles en ${guild.name}.`
+    );
+
+    return false;
+
+  }
+
+
+  if (
+    boosterRole.position >=
+    botMember.roles.highest.position
+  ) {
+
+    console.error(
+      `❌ El rol Booster está por encima del bot en ${guild.name}.`
+    );
+
+    return false;
+
+  }
+
+
+  return true;
+
+}
+
+
+/*
+ * ============================================================
+ * CREAR ROL PERSONAL
  * ============================================================
  */
 
@@ -229,12 +263,6 @@ async function createBoosterRole(member) {
   const guild =
     member.guild;
 
-
-  /*
-   * ----------------------------------------------------------
-   * CARGAR REGISTRO
-   * ----------------------------------------------------------
-   */
 
   const boosterRoles =
     loadBoosterRoles();
@@ -258,28 +286,7 @@ async function createBoosterRole(member) {
       `❌ No encontré el rol Booster: ${BOOSTER_ROLE_ID}`
     );
 
-    return;
-
-  }
-
-
-  /*
-   * ----------------------------------------------------------
-   * COMPROBAR BOT
-   * ----------------------------------------------------------
-   */
-
-  const botMember =
-    guild.members.me;
-
-
-  if (!botMember) {
-
-    console.error(
-      '❌ No pude encontrar al bot dentro del servidor.'
-    );
-
-    return;
+    return null;
 
   }
 
@@ -291,79 +298,57 @@ async function createBoosterRole(member) {
    */
 
   if (
-    !botMember.permissions.has(
-      PermissionsBitField.Flags.ManageRoles
+    !canManageBoosterRole(
+      guild,
+      boosterRole
     )
   ) {
 
-    console.error(
-      `❌ El bot no tiene Manage Roles en ${guild.name}`
-    );
-
-    return;
+    return null;
 
   }
 
 
   /*
    * ----------------------------------------------------------
-   * COMPROBAR JERARQUÍA
+   * SI YA EXISTE REGISTRO
    * ----------------------------------------------------------
    */
 
-  if (
-    boosterRole.position >=
-    botMember.roles.highest.position
-  ) {
-
-    console.error(
-      `❌ El rol Booster está por encima del bot en ${guild.name}.`
-    );
-
-    return;
-
-  }
-
-
-  /*
-   * ----------------------------------------------------------
-   * ¿YA EXISTE UN REGISTRO?
-   * ----------------------------------------------------------
-   */
-
-  const existingRoleId =
+  const registeredRoleId =
     boosterRoles[member.id];
 
 
-  if (existingRoleId) {
+  if (registeredRoleId) {
 
-    const existingRole =
+    const registeredRole =
       guild.roles.cache.get(
-        existingRoleId
+        registeredRoleId
       );
 
 
-    /*
-     * Si todavía existe, simplemente
-     * aseguramos que el usuario lo tenga.
-     */
+    if (registeredRole) {
 
-    if (existingRole) {
+      /*
+       * El rol existe.
+       * Nos aseguramos de que el usuario lo tenga.
+       */
 
       if (
         !member.roles.cache.has(
-          existingRole.id
+          registeredRole.id
         )
       ) {
 
         await member.roles.add(
-          existingRole,
-          'Restauración del rol personal de booster'
+          registeredRole,
+          'Restauración de rol personal de booster'
         );
 
       }
 
-      return;
+
+      return registeredRole;
 
     }
 
@@ -418,11 +403,15 @@ async function createBoosterRole(member) {
    * ----------------------------------------------------------
    */
 
-  await personalRole.setPosition(
+  const targetPosition =
     Math.max(
       boosterRole.position - 1,
       1
-    ),
+    );
+
+
+  await personalRole.setPosition(
+    targetPosition,
     {
       reason:
         'Colocar rol personal debajo de Booster'
@@ -432,7 +421,7 @@ async function createBoosterRole(member) {
 
   /*
    * ----------------------------------------------------------
-   * GUARDAR RELACIÓN USER ID → ROLE ID
+   * GUARDAR USER ID → ROLE ID
    * ----------------------------------------------------------
    */
 
@@ -446,7 +435,7 @@ async function createBoosterRole(member) {
 
   /*
    * ----------------------------------------------------------
-   * ASIGNAR AL USUARIO
+   * ASIGNAR
    * ----------------------------------------------------------
    */
 
@@ -455,12 +444,6 @@ async function createBoosterRole(member) {
     'Asignación de rol personal de booster'
   );
 
-
-  /*
-   * ----------------------------------------------------------
-   * LOG
-   * ----------------------------------------------------------
-   */
 
   console.log(
     `✅ Rol personal creado para ${member.user.tag}`
@@ -474,12 +457,15 @@ async function createBoosterRole(member) {
     `   Rol: ${personalRole.id}`
   );
 
+
+  return personalRole;
+
 }
 
 
 /*
  * ============================================================
- * ELIMINAR ROL DE BOOSTER
+ * ELIMINAR ROL PERSONAL
  * ============================================================
  */
 
@@ -489,34 +475,18 @@ async function deleteBoosterRole(member) {
     member.guild;
 
 
-  /*
-   * ----------------------------------------------------------
-   * CARGAR REGISTRO
-   * ----------------------------------------------------------
-   */
-
   const boosterRoles =
     loadBoosterRoles();
 
-
-  /*
-   * ----------------------------------------------------------
-   * BUSCAR ROL POR ID DEL USUARIO
-   * ----------------------------------------------------------
-   */
 
   const roleId =
     boosterRoles[member.id];
 
 
-  /*
-   * No hay registro
-   */
-
   if (!roleId) {
 
     console.log(
-      `ℹ️ ${member.user.tag} dejó de boostear, pero no tenía un rol registrado.`
+      `ℹ️ ${member.user.tag} dejó de boostear, pero no tiene un rol registrado.`
     );
 
     return;
@@ -525,21 +495,7 @@ async function deleteBoosterRole(member) {
 
 
   /*
-   * ----------------------------------------------------------
-   * BUSCAR ROL
-   * ----------------------------------------------------------
-   */
-
-  const personalRole =
-    guild.roles.cache.get(
-      roleId
-    );
-
-
-  /*
-   * ----------------------------------------------------------
-   * ELIMINAR DEL REGISTRO
-   * ----------------------------------------------------------
+   * Primero eliminamos el registro.
    */
 
   delete boosterRoles[member.id];
@@ -550,10 +506,14 @@ async function deleteBoosterRole(member) {
 
 
   /*
-   * ----------------------------------------------------------
-   * SI YA NO EXISTE
-   * ----------------------------------------------------------
+   * Buscar rol.
    */
+
+  const personalRole =
+    guild.roles.cache.get(
+      roleId
+    );
+
 
   if (!personalRole) {
 
@@ -567,9 +527,7 @@ async function deleteBoosterRole(member) {
 
 
   /*
-   * ----------------------------------------------------------
-   * COMPROBAR QUE SEA EDITABLE
-   * ----------------------------------------------------------
+   * Comprobar que el bot pueda eliminarlo.
    */
 
   if (
@@ -577,7 +535,58 @@ async function deleteBoosterRole(member) {
   ) {
 
     console.error(
-      `❌ No puedo eliminar el rol ${personalRole.id}. El bot no puede administrarlo.`
+      `❌ No puedo eliminar el rol ${personalRole.id}.`
+    );
+
+    return;
+
+  }
+
+
+  /*
+   * Eliminar.
+   */
+
+  await personalRole.delete(
+    `Eliminado porque ${member.user.tag} dejó de boostear`
+  );
+
+
+  console.log(
+    `🗑️ Rol personal eliminado de ${member.user.tag}`
+  );
+
+}
+
+
+/*
+ * ============================================================
+ * SINCRONIZAR BOOSTERS EXISTENTES
+ * ============================================================
+ */
+
+async function syncExistingBoosters(guild) {
+
+  console.log(
+    `🔄 Sincronizando boosters en ${guild.name}...`
+  );
+
+
+  /*
+   * ----------------------------------------------------------
+   * OBTENER TODOS LOS MIEMBROS
+   * ----------------------------------------------------------
+   */
+
+  try {
+
+    await guild.members.fetch();
+
+  } catch (error) {
+
+    console.error(
+      `❌ No pude obtener los miembros de ${guild.name}:`,
+      error
     );
 
     return;
@@ -587,23 +596,116 @@ async function deleteBoosterRole(member) {
 
   /*
    * ----------------------------------------------------------
-   * ELIMINAR
+   * BUSCAR BOOSTERS
    * ----------------------------------------------------------
    */
 
-  await personalRole.delete(
-    `Eliminado porque ${member.user.tag} dejó de boostear`
+  const boosters =
+    guild.members.cache.filter(
+      member =>
+        Boolean(
+          member.premiumSince
+        )
+    );
+
+
+  console.log(
+    `🔎 Encontrados ${boosters.size} boosters en ${guild.name}.`
   );
 
 
   /*
    * ----------------------------------------------------------
-   * LOG
+   * CREAR ROLES FALTANTES
    * ----------------------------------------------------------
    */
 
+  let created = 0;
+
+  let alreadyHad = 0;
+
+  let failed = 0;
+
+
+  for (
+    const member of boosters.values()
+  ) {
+
+    try {
+
+      const before =
+        loadBoosterRoles();
+
+      const hadRole =
+        Boolean(
+          before[member.id]
+        );
+
+
+      const role =
+        await createBoosterRole(
+          member
+        );
+
+
+      if (!role) {
+
+        failed++;
+
+        continue;
+
+      }
+
+
+      if (hadRole) {
+
+        alreadyHad++;
+
+      } else {
+
+        created++;
+
+      }
+
+
+    } catch (error) {
+
+      failed++;
+
+      console.error(
+        `❌ Error sincronizando a ${member.user.tag}:`,
+        error
+      );
+
+    }
+
+  }
+
+
   console.log(
-    `🗑️ Rol personal eliminado de ${member.user.tag}`
+    `✅ Sincronización terminada en ${guild.name}.`
+  );
+
+  console.log(
+    `   Nuevos roles: ${created}`
+  );
+
+  console.log(
+    `   Ya existentes: ${alreadyHad}`
+  );
+
+  console.log(
+    `   Errores: ${failed}`
   );
 
 }
+
+
+/*
+ * ============================================================
+ * EXPORTAR SINCRONIZADOR
+ * ============================================================
+ */
+
+module.exports.syncExistingBoosters =
+  syncExistingBoosters;
